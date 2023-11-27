@@ -357,6 +357,8 @@ thread_sleep(int64_t end) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	if (list_empty(&ready_list))
+		return;
 	struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
 	if (front->priority > new_priority)
 		thread_yield();
