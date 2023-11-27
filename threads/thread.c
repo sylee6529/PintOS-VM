@@ -146,16 +146,12 @@ thread_tick (void) {
 	int64_t current_ticks = timer_ticks();
 
 	struct list_elem *e = list_begin(&sleep_list);
-	while (e != list_end(&sleep_list))
-	{
+	while (e != list_end(&sleep_list)) {
 		struct thread *t = list_entry(e, struct thread, elem);
-		if (t->wake_up_ticks <= current_ticks)
-		{
+		if (t->wake_up_ticks <= current_ticks) {
 			e = list_remove(e); // 스레드를 목록에서 제거
 			thread_unblock(t);	// 스레드 깨우기
-		}
-		else
-		{
+		} else {
 			e = list_next(e);
 		}
 	}
@@ -228,6 +224,9 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	if (thread_get_priority() < priority)
+		thread_yield();
+
 	return tid;
 }
 
@@ -245,6 +244,16 @@ thread_block (void) {
 	schedule ();
 }
 
+static bool
+priority_more (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) { 
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+
+  return a->priority > b->priority;
+}
+
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -261,7 +270,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+  	list_insert_ordered(&ready_list, &t->elem, priority_more, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -324,7 +333,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+    	list_insert_ordered(&ready_list, &curr->elem, priority_more, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -339,7 +348,7 @@ thread_sleep(int64_t end) {
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_push_back(&sleep_list, &curr->elem);
+    	list_insert_ordered(&sleep_list, &curr->elem, priority_more, NULL);
 	do_schedule(THREAD_BLOCKED);
 	intr_set_level(old_level);
 }
@@ -348,6 +357,9 @@ thread_sleep(int64_t end) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
+	if (front->priority > new_priority)
+		thread_yield();
 }
 
 /* Returns the current thread's priority. */
