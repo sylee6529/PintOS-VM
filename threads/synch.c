@@ -192,19 +192,17 @@ lock_acquire (struct lock *lock) {
 
    struct thread *cur = thread_current();
    if (lock->holder != NULL) {
-      // getting lock
+      // put signal that this thread is waiting for the lock
       cur->waiting_lock = lock;
 
-      struct thread *first_holder = lock->holder;
-      struct thread *holder = first_holder;
       // nested donation of priority
-      while (holder) {
-         if (holder->priority < cur->priority) {
-            holder->priority = cur->priority;
-         }
-         if (holder->waiting_lock == NULL)
+      struct lock *loop_lock = lock;
+      while (loop_lock) {
+         if (loop_lock->holder->priority < cur->priority)
+            loop_lock->holder->priority = cur->priority;
+         if (loop_lock->holder->waiting_lock == NULL)
             break;
-         holder = holder->waiting_lock->holder;
+         loop_lock = loop_lock->holder->waiting_lock;
       }
    }
 
@@ -263,6 +261,7 @@ lock_release (struct lock *lock) {
       }
    }
    cur->priority = new_priority;
+   cur->waiting_lock = NULL;
    sema_up (&lock->semaphore);
 }
 
