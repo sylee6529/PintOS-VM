@@ -356,7 +356,15 @@ thread_sleep(int64_t end) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	// check donation
+	struct thread *cur = thread_current();
+	if (cur->priority == cur->original_priority) {	// donation non-exists
+		cur->original_priority = cur->priority = new_priority;
+	} else {	// donation exists
+		cur->original_priority = new_priority;
+	}
+	
+	// check if there's any thread to yield
 	if (list_empty(&ready_list))
 		return;
 	struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
@@ -457,8 +465,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->status = THREAD_BLOCKED;
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
+	t->original_priority = t->priority = priority;
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	list_init(&t->my_locks);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
