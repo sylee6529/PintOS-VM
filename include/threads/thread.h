@@ -27,6 +27,11 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define NICE_MIN -20
+#define NICE_DEFAULT 0
+#define NICE_MAX 20
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
 
 /* A kernel thread or user process.
  *
@@ -101,7 +106,11 @@ struct thread {
 
 	/* Priority donation */
 	struct lock *waiting_lock;			/* 이 스레드가 사용을 기다리고 있는 락 */
-	struct list my_locks;				/* 이 스레드가 최초 요청한 락의 목록 */
+	struct list my_locks;				/* 이 스레드가 사용하고 있는 락의 목록 */
+
+	/* Advanced Scheduler */
+	int nice;
+	int recent_cpu;
 
 #ifdef USERPROG
 			/* Owned by userprog/process.c. */
