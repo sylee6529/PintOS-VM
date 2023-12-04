@@ -96,7 +96,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int original_priority;				/* boost 이전의 priority */
+	
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -105,16 +105,18 @@ struct thread {
 	int64_t wake_up_ticks;
 
 	/* Priority donation */
+	int original_priority;				/* boost 이전의 priority */
 	struct lock *waiting_lock;			/* 이 스레드가 사용을 기다리고 있는 락 */
-	struct list my_locks;				/* 이 스레드가 사용하고 있는 락의 목록 */
+	struct list donations;				
+	struct list_elem donations_elem;
 
 	/* Advanced Scheduler */
 	int nice;
 	int recent_cpu;
 
 #ifdef USERPROG
-			/* Owned by userprog/process.c. */
-			uint64_t *pml4; /* Page map level 4 */
+	/* Owned by userprog/process.c. */
+	uint64_t *pml4; /* Page map level 4 */
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -140,9 +142,13 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
+
 void thread_block (void);
 bool priority_more (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+void test_max_priority(void);
 void thread_unblock (struct thread *);
+void thread_awake(int64_t ticks);
+
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -154,11 +160,23 @@ void thread_yield (void);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
+void refresh_priority (void);
+void donate_priority (void);
+void remove_with_lock (struct lock *lock);
+
+/* MLFQS */
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void mlfqs_priority (struct thread *t);
+void mlfqs_recent_cpu (struct thread *t);
+void mlfqs_load_avg (void);
+void mlfqs_increment (void);
+void mlfqs_recalc (void);
+
 void do_iret (struct intr_frame *tf);
+
 
 #endif /* threads/thread.h */

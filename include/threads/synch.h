@@ -26,6 +26,7 @@ struct lock {
 };
 
 void lock_init (struct lock *);
+bool donations_priority_more(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
