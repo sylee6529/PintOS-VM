@@ -38,6 +38,13 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
+void check_address(void *addr) {
+	struct thread *t = thread_current();
+	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL) {
+		exit(-1);
+	}
+}
+
 void halt(void) {
 	power_off();
 }
@@ -70,11 +77,23 @@ int wait (pid_t pid) {
 }
 
 bool create (const char *file, unsigned initial_size) {
-	return filesys_create(file, initial_size);
+	check_address(file);
+	if (filesys_create(file, initial_size)) {
+		return true;
+	}
+	else {
+		return false;
+	}
 }
 
 bool remove (const char *file) {
-	return filesys_remove(file);
+	check_address(file);
+	if (filesys_remove(file)) {
+		return true;
+	}
+	else {
+		return false;
+	}
 }
 
 int open (const char *file) {

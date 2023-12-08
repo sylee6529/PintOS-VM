@@ -258,7 +258,7 @@ void
 test_max_priority(void) {
 	if (!list_empty(&ready_list)) {
 		struct thread *top_pri = list_begin(&ready_list);
-		if (priority_more(top_pri, &thread_current()->elem, NULL))
+		if (!intr_context() && priority_more(top_pri, &thread_current()->elem, NULL))
 		{
 			thread_yield();
 		}

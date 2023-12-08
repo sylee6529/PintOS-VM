@@ -4,6 +4,7 @@
 
 typedef int pid_t;
 
+void check_address(void *addr);
 void halt(void);
 void exit (int status);
 pid_t fork (const char *thread_name);
