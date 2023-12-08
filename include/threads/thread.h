@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 #include "threads/interrupt.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -113,6 +114,15 @@ struct thread {
 	/* Advanced Scheduler */
 	int nice;
 	int recent_cpu;
+	
+	/* process */
+	struct list child_list;
+	struct list_elem child_elem;
+	struct semaphore is_parent_waiting;
+
+	/* filesys */
+	struct file **fd_table;
+	int next_fd;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -177,6 +187,7 @@ void mlfqs_increment (void);
 void mlfqs_recalc (void);
 
 void do_iret (struct intr_frame *tf);
+struct thread *get_child_thread (tid_t tid);
 
 
 #endif /* threads/thread.h */

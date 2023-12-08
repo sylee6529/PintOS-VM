@@ -21,6 +21,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#define MAX_ARGS 128
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
@@ -50,10 +51,13 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	char *save_ptr;
+	strtok_r(file_name, " ", &save_ptr);
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+	
 	return tid;
 }
 
@@ -176,13 +180,27 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	/* project 2: argument passing */
+    char *argv[MAX_ARGS];
+    int argc = 0;
+	tokenizer(file_name, argv, &argc);
+	/* project 2: argument passing */
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
 	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
+	if (!success) {
+		palloc_free_page (file_name);
 		return -1;
+	}
+
+	/* project 2: argument passing */
+    stacker(argv, argc, &_if);
+    _if.R.rdi = argc;
+	_if.R.rsi = _if.rsp + 8;
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK-_if.rsp, true);
+	/* project 2: argument passing */
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -204,7 +222,15 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	return -1;
+
+	struct thread *child;
+	if (!(child = get_child_thread(child_tid)))
+		return -1;
+
+	sema_down(&child->is_parent_waiting);
+	list_remove(&child->child_elem);
+
+	return 0;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -460,7 +486,6 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 
 	/* Disallow mapping page 0.
 	   Not only is it a bad idea to map page 0, but if we allowed
-	   it then user code that passed a null pointer to system calls
 	   could quite likely panic the kernel by way of null pointer
 	   assertions in memcpy(), etc. */
 	if (phdr->p_vaddr < PGSIZE)
@@ -637,3 +662,52 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+
+void tokenizer(char *file_name, char **argv, int *argc) {
+	char *token, *save_ptr;
+	token = strtok_r(file_name, " ", &save_ptr);
+	while (token != NULL) {
+		argv[*argc] = token;
+		token = strtok_r(NULL, " ", &save_ptr);
+		(*argc)++;
+	}
+}
+
+void stacker(char **argv, int argc, struct intr_frame *if_) {
+	/* stacking variables */
+	char *addrs[MAX_ARGS];
+	int i = argc-1;
+	while (i >= 0) {
+		// printf("stacking %s at %p\n", argv[i], if_->rsp-strlen(argv[i])-1);
+		int arglen = strlen(argv[i]);
+		if_->rsp -= arglen + 1;
+		strlcpy(if_->rsp, argv[i], arglen + 1);
+		addrs[i--] = if_->rsp;
+	}
+
+	/* padding aligning */
+	while (if_->rsp % 8 != 0) {
+		// printf("padding 1 at %p\n", if_->rsp-1);
+		if_->rsp--;
+		*(uint8_t *)if_->rsp = 0;
+	}
+
+	/* null pointer sentiel */
+	// printf("border at %p\n", if_->rsp-8);
+	if_->rsp -= 8;
+	*(uint64_t *)if_->rsp = 0;
+
+	/* stacking addresses */
+	i = argc-1;
+	while (i >= 0) {
+		// printf("stacking %p at %p\n", addrs[i], if_->rsp-8);
+		if_->rsp -= 8;
+		*(uint64_t *)if_->rsp = (uint64_t)addrs[i--];
+	}
+	
+	/* fake return address */
+	// printf("fake return address at %p\n", if_->rsp-8);
+	if_->rsp -= 8;
+	*(uint64_t *)if_->rsp = 0;
+}

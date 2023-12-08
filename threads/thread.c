@@ -215,6 +215,12 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	/* process */
+	list_push_back(&thread_current()->child_list, &t->child_elem);
+	
+	/* filesys */
+	// fd_table 초기화 필요
+
 	/* Add to run queue. */
 	thread_unblock (t);
 
@@ -343,7 +349,7 @@ thread_exit (void) {
 #ifdef USERPROG
 	process_exit ();
 #endif
-
+	sema_up(&thread_current()->is_parent_waiting);
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
@@ -639,6 +645,22 @@ init_thread (struct thread *t, const char *name, int priority) {
 	/* MLFQS*/
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
+
+	/* process */
+	list_init(&t->child_list);
+	sema_init(&t->is_parent_waiting, 0);
+
+	/* filesys */
+	// 작동하지 않는 코드, 먼저 수정하셔도 됩니다
+	// t->fd_table = palloc_get_multiple(PAL_ZERO, 2);
+	// if (t->fd_table == NULL) {
+	// 	palloc_free_page(t);
+	// 	return TID_ERROR;
+	// }
+	// // t->fd_table[0] = 0;
+	// // t->fd_table[1] = 1;
+	// t->next_fd = 2;
+	// t->fd_table -= 2;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -819,3 +841,16 @@ allocate_tid (void) {
 	return tid;
 }
 
+struct thread *
+get_child_thread (tid_t tid) {
+	struct thread *t;
+	struct list_elem *e;
+
+	for (e = list_begin(&thread_current()->child_list); e != list_end(&thread_current()->child_list); e = list_next(e)) {
+		t = list_entry(e, struct thread, child_elem);
+		if (t->tid == tid) {
+			return t;
+		}
+	}
+	return NULL;
+}
