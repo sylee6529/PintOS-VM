@@ -1,4 +1,3 @@
-#include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -8,6 +7,9 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
+
+typedef int pid_t;
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -43,6 +45,20 @@ void check_address(void *addr) {
 	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL) {
 		exit(-1);
 	}
+}
+
+int add_file_to_fd_table (struct file *file) {
+	struct thread *t = thread_current();
+	struct file **fdt = t->fd_table;
+	int fd = t->fd_idx;
+
+	while (t->fd_table[fd] != NULL) {
+		fd++;
+	}
+
+	t->fd_idx = fd;
+	fdt[fd] = file;
+	return fd;
 }
 
 void halt(void) {
@@ -97,7 +113,20 @@ bool remove (const char *file) {
 }
 
 int open (const char *file) {
-	return filesys_open(file);
+	check_address(file);
+	struct file *file_info = filesys_open(file);
+
+	if (file_info == NULL) {
+		return -1;
+	}
+
+	int fd = add_file_to_fd_table(file_info);
+
+	if (fd == -1) {
+		file_close(file_info);
+	}
+	
+	return fd;
 }
 
 int filesize (int fd) {

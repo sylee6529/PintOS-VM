@@ -219,7 +219,13 @@ thread_create (const char *name, int priority,
 	list_push_back(&thread_current()->child_list, &t->child_elem);
 	
 	/* filesys */
-	// fd_table 초기화 필요
+	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if (t->fd_table == NULL) {
+		return TID_ERROR;
+	}
+	t->fd_idx = 2;
+	t->fd_table[0] = 1;
+	t->fd_table[1] = 2;
 
 	/* Add to run queue. */
 	thread_unblock (t);

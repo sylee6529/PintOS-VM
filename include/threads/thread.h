@@ -34,6 +34,9 @@ typedef int tid_t;
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
 
+/* system call */
+#define FDT_PAGES 3
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -120,9 +123,7 @@ struct thread {
 	struct list_elem child_elem;
 	struct semaphore is_parent_waiting;
 
-	/* filesys */
-	struct file **fd_table;
-	int next_fd;
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -136,6 +137,11 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+	/* filesys */
+	struct file **fd_table;
+	int next_fd;
+	int fd_idx;
 };
 
 /* If false (default), use round-robin scheduler.
