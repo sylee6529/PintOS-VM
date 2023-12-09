@@ -121,9 +121,10 @@ struct thread {
 	/* process */
 	struct list child_list;
 	struct list_elem child_elem;
-	struct semaphore is_parent_waiting;
-
-
+	struct semaphore wait_sema;
+	// struct semaphore load_sema;
+	// struct semaphore destroy_sema;
+	int exit_status;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -140,7 +141,6 @@ struct thread {
 
 	/* filesys */
 	struct file **fd_table;
-	int next_fd;
 	int fd_idx;
 };
 

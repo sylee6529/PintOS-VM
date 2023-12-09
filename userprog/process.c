@@ -166,7 +166,8 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	char *file_name = f_name;
+	char *file_name = (char *)palloc_get_page(PAL_ZERO);
+	strlcpy(file_name, (char *)f_name, strlen(f_name) + 1);
 	bool success;
 
 	/* We cannot use the intr_frame in the thread structure.
@@ -188,6 +189,8 @@ process_exec (void *f_name) {
 
 	/* And then load the binary */
 	success = load (file_name, &_if);
+
+	// sema_up(&thread_current ()->load_sema);
 
 	/* If load failed, quit. */
 	if (!success) {
@@ -218,7 +221,7 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
@@ -227,10 +230,12 @@ process_wait (tid_t child_tid UNUSED) {
 	if (!(child = get_child_thread(child_tid)))
 		return -1;
 
-	sema_down(&child->is_parent_waiting);
-	list_remove(&child->child_elem);
+	sema_down (&child->wait_sema);
+	list_remove (&child->child_elem);
+	int exit_status = child->exit_status;
+	// sema_up (&child->destroy_sema);
 
-	return 0;
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */

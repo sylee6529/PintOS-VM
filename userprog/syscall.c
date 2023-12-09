@@ -1,3 +1,5 @@
+#include <debug.h>
+#include "userprog/process.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -38,11 +40,12 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	
 }
 
 void check_address(void *addr) {
 	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4, addr) == NULL) {
+	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
 		exit(-1);
 	}
 }
@@ -66,7 +69,12 @@ void halt(void) {
 }
 
 void exit (int status) {
-	printf("%s: exit(%d)\n", thread_current()->name, status);
+	if (!list_empty(&thread_current()->child_list)) {
+		thread_current()->exit_status = list_entry(list_front(&thread_current()->child_list), struct thread, child_elem)->exit_status;
+	} else {
+		thread_current()->exit_status = status;
+	}
+	printf("%s: exit(%d)\n", thread_name(), thread_current()->exit_status);
 	thread_exit();
 }
 
@@ -75,21 +83,14 @@ pid_t fork (const char *thread_name) {
 }
 
 int exec (const char *file) {
-	tid_t tid;
-	struct thread *child;
-
-	if ((tid = process_exec(file)) == TID_ERROR) {
-		return TID_ERROR;
+	check_address(file);
+    if (process_exec((void *) file) < 0) {
+		exit(-1);
 	}
-
-	child = get_child_thread(tid);
-	ASSERT(child);
-
-	return tid;
 }
 
 int wait (pid_t pid) {
-	return 0;
+	return process_wait (pid);
 }
 
 bool create (const char *file, unsigned initial_size) {
@@ -138,12 +139,20 @@ int read (int fd, void *buffer, unsigned length) {
 	return 0;
 }
 
+struct file *get_file_from_fd_table (int fd) {
+	struct thread *t = thread_current();
+	if (fd < 0 || fd >= 128) {
+		return NULL;
+	}
+	return t->fd_table[fd];
+}
+
 int write (int fd, const void *buffer, unsigned length) {
 	if (fd == 1) {
 		putbuf(buffer, length);
 		return length;
 	} else {
-		// struct file *file = fdt_get_file(fd);
+		struct file *file = get_file_from_fd_table(fd);
 	}
 	return 0;
 }
@@ -164,7 +173,7 @@ void close (int fd) {
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt();			// pintos를 종료시키는 시스템 콜
