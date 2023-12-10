@@ -172,13 +172,24 @@ struct file *get_file_from_fd_table (int fd) {
 }
 
 int write (int fd, const void *buffer, unsigned length) {
-	if (fd == 1) {
+	check_address(buffer);
+
+	int bytesRead = 0;
+
+	if (fd == 0) {
+		return -1;
+	} else if (fd == 1) {
 		putbuf(buffer, length);
 		return length;
 	} else {
-		struct file *file = get_file_from_fd_table(fd);
+		struct file *f = get_file_from_fd_table(fd);
+		if (f == NULL) {
+			return -1;
+		}
+
+		bytesRead = file_write(f, buffer, length);
 	}
-	return 0;
+	return bytesRead;
 }
 
 void seek (int fd, unsigned position) {
