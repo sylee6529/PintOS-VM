@@ -122,9 +122,10 @@ struct thread {
 	struct list child_list;
 	struct list_elem child_elem;
 	struct semaphore wait_sema;
-	// struct semaphore load_sema;
-	// struct semaphore destroy_sema;
+	struct semaphore fork_sema;
+	struct semaphore exit_sema;
 	int exit_status;
+	struct intr_frame parent_tf;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

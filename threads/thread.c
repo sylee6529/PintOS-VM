@@ -355,8 +355,6 @@ thread_exit (void) {
 #ifdef USERPROG
 	process_exit ();
 #endif
-	sema_up(&thread_current()->wait_sema);
-	// sema_down (&thread_current ()->destroy_sema);
 
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
@@ -657,8 +655,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	/* process */
 	list_init(&t->child_list);
 	sema_init(&t->wait_sema, 0);
-	// sema_init(&t->load_sema, 0);
-	// sema_init(&t->destroy_sema, 0);
+	sema_init(&t->fork_sema, 0);
+	sema_init(&t->exit_sema, 0);
 
 	/* filesys */
 	// 작동하지 않는 코드, 먼저 수정하셔도 됩니다

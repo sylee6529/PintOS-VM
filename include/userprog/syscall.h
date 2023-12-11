@@ -2,13 +2,13 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
-typedef int pid_t;
+typedef int tid_t;
 
 void check_address(void *addr);
 int add_file_to_fd_table (struct file *file);
 void halt(void);
 void exit (int status);
-pid_t fork (const char *thread_name);
+tid_t fork (const char *thread_name);
 int exec (const char *file);
 int wait (pid_t);
 bool create (const char *file, unsigned initial_size);

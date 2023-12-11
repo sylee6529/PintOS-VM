@@ -11,8 +11,6 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
-typedef int pid_t;
-
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file *get_file_from_fd_table (int fd);
@@ -70,17 +68,14 @@ void halt(void) {
 }
 
 void exit (int status) {
-	if (!list_empty(&thread_current()->child_list)) {
-		thread_current()->exit_status = list_entry(list_front(&thread_current()->child_list), struct thread, child_elem)->exit_status;
-	} else {
-		thread_current()->exit_status = status;
-	}
+	thread_current()->exit_status = status;
 	printf("%s: exit(%d)\n", thread_name(), thread_current()->exit_status);
 	thread_exit();
 }
 
-pid_t fork (const char *thread_name) {
-	return 0;
+tid_t fork (const char *thread_name, int (*f)(int)) {
+	check_address(thread_name);
+	return process_fork(thread_name, f);
 }
 
 int exec (const char *file) {
@@ -90,8 +85,8 @@ int exec (const char *file) {
 	}
 }
 
-int wait (pid_t pid) {
-	return process_wait (pid);
+int wait (tid_t tid) {
+	return process_wait (tid);
 }
 
 bool create (const char *file, unsigned initial_size) {
@@ -217,7 +212,7 @@ syscall_handler (struct intr_frame *f) {
 			exit(f->R.rdi);	// 현재 프로세스를 종료시키는 시스템 콜
 			break;
 		case SYS_FORK:
-			f->R.rax = fork(f->R.rdi);
+			f->R.rax = fork(f->R.rdi, f);
 			break;
 		case SYS_EXEC:
 			if (exec(f->R.rdi) == -1) {
