@@ -143,6 +143,7 @@ struct thread {
 	/* filesys */
 	struct file **fd_table;
 	int fd_idx;
+	struct file *running;
 };
 
 /* If false (default), use round-robin scheduler.

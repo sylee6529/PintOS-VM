@@ -14,6 +14,7 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file *get_file_from_fd_table (int fd);
+struct lock file_lock;
 
 /* System call.
  *
@@ -39,7 +40,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
-	
+
+	lock_init(&file_lock);
 }
 
 void check_address(void *addr) {
@@ -111,31 +113,30 @@ bool remove (const char *file) {
 
 int open (const char *file) {
 	check_address(file);
+	lock_acquire(&file_lock);
 	struct file *file_info = filesys_open(file);
-
 	if (file_info == NULL) {
+		lock_release(&file_lock);
 		return -1;
 	}
-
 	int fd = add_file_to_fd_table(file_info);
-
 	if (fd == -1) {
+		lock_release(&file_lock);
 		file_close(file_info);
 	}
-	
+	lock_release(&file_lock);
 	return fd;
 }
 
 int filesize (int fd) {
-	// return file_length(thread_current()->fd_table[fd]);
-	return 0;
+	return file_length(thread_current()->fd_table[fd]);
 }
 
 int read (int fd, void *buffer, unsigned length) {
 	check_address(buffer);
-
+	
 	int bytesRead = 0;
-
+	lock_acquire(&file_lock);
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
 			char c = input_getc();
@@ -145,16 +146,17 @@ int read (int fd, void *buffer, unsigned length) {
 			if (c == '\n') break;
 		}
 	} else if (fd == 1) {
+		lock_release(&file_lock);
 		return -1;
 	} else {
 		struct file *f = get_file_from_fd_table(fd);
 		if (f == NULL) {
+			lock_release(&file_lock);
 			return -1; 
 		}
-
 		bytesRead = file_read(f, buffer, length);
 	}
-
+	lock_release(&file_lock);
 	return bytesRead;
 }
 
@@ -168,35 +170,55 @@ struct file *get_file_from_fd_table (int fd) {
 
 int write (int fd, const void *buffer, unsigned length) {
 	check_address(buffer);
-
 	int bytesRead = 0;
 
+	lock_acquire(&file_lock);
 	if (fd == 0) {
+		lock_release(&file_lock);
 		return -1;
 	} else if (fd == 1) {
 		putbuf(buffer, length);
+		lock_release(&file_lock);
 		return length;
 	} else {
 		struct file *f = get_file_from_fd_table(fd);
 		if (f == NULL) {
+			lock_release(&file_lock);
 			return -1;
 		}
-
 		bytesRead = file_write(f, buffer, length);
 	}
+	lock_release(&file_lock);
 	return bytesRead;
 }
 
 void seek (int fd, unsigned position) {
-	return 0;
+	struct file *f = get_file_from_fd_table(fd);
+	if (f == NULL) {
+		return;
+	}
+	file_seek(f, position);
 }
 
 unsigned tell (int fd) {
-	return 0;
+	struct file *f = get_file_from_fd_table(fd);
+	if (f == NULL) {
+		return -1;
+	}
+	return file_tell(f);
 }
 
 void close (int fd) {
-	return 0;
+	struct thread *t = thread_current();
+	struct file **fdt = t->fd_table;
+	if (fd < 0 || fd >= 128) {
+		return;
+	}
+	if (fdt[fd] == NULL) {
+		return;
+	}
+	file_close(fdt[fd]);
+	fdt[fd] = NULL;
 }
 
 
@@ -251,6 +273,5 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		default:
 			exit(-1);
-			thread_exit();
 	}
 }

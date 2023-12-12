@@ -283,16 +283,12 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
-	for (int i = 0; i < MAX_FILE; i++) {
-		// struct file *file = curr->fd_table[i];
-		// if (file == NULL) continue;
-		// file_close(file);
-		// curr->fd_table[i] = NULL;
+	for (int i = 2; i < MAX_FILE; i++) {
 		close(i);
 	}
 	palloc_free_multiple(curr->fd_table, FDT_PAGES);
 
-	// file_close(curr->running);
+	file_close(curr->running);
 
 	process_cleanup ();
 
@@ -401,6 +397,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
+extern struct lock file_lock;
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
@@ -417,11 +414,17 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
+	lock_acquire(&file_lock);
 	file = filesys_open (file_name);
 	if (file == NULL) {
+		lock_release(&file_lock);
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
+
+	t->running = file;
+	file_deny_write(file);
+	lock_release(&file_lock);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -492,7 +495,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (!setup_stack (if_))
 		goto done;
 
-	/* Start address. */
+/* Start address. */
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
@@ -502,7 +505,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
 	return success;
 }
 
