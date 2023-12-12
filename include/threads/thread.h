@@ -36,6 +36,7 @@ typedef int tid_t;
 
 /* system call */
 #define FDT_PAGES 3
+#define FDCOUNT_LIMIT FDT_PAGES *(1 << 9)
 
 /* A kernel thread or user process.
  *

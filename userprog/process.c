@@ -21,8 +21,6 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
-#define MAX_ARGS 128
-#define MAX_FILE 128
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
@@ -71,8 +69,9 @@ initd (void *f_name) {
 
 	process_init ();
 
-	if (process_exec (f_name) < 0)
+	if (process_exec (f_name) < 0) {
 		PANIC("Fail to launch initd\n");
+	}
 	NOT_REACHED ();
 }
 
@@ -91,6 +90,9 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 
 	sema_down(&child->fork_sema);
 
+	if (child->exit_status == TID_ERROR) {
+		return TID_ERROR;
+	}
 	return tid;
 }
 
@@ -111,14 +113,14 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
-	parent_page = pml4_get_page (parent->pml4, va);
+	parent_page = pml4_get_page(parent->pml4, va);
 	if (parent_page == NULL) {
 		return false;
 	}
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page (PAL_USER | PAL_ZERO);
+	newpage = palloc_get_page(PAL_USER);
 	if (newpage == NULL) {
 		return false;
 	}
@@ -126,14 +128,13 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
-	memcpy (newpage, parent_page, PGSIZE);
-	writable = is_writable (pte);
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
-		palloc_free_page (newpage);
 		return false;
 	}
 	return true;
@@ -154,7 +155,6 @@ __do_fork (void *aux) {
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
-	
 	memcpy (&if_, parent_tf, sizeof (struct intr_frame));
 	if_.R.rax = 0;
 
@@ -178,7 +178,11 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	for (int i = 0; i < MAX_FILE; i++) {
+	if (parent->fd_idx == FDCOUNT_LIMIT) {
+		goto error;
+	}
+
+	for (int i = 0; i < FDCOUNT_LIMIT; i++) {
 		struct file *file = parent->fd_table[i];
 		if (file == NULL) continue;
 		if (file > 2) {
@@ -189,7 +193,7 @@ __do_fork (void *aux) {
 	current->fd_idx = parent->fd_idx;
 	sema_up(&current->fork_sema);
 
-	process_init ();
+	// process_init ();
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
@@ -227,8 +231,6 @@ process_exec (void *f_name) {
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
-	// sema_up(&thread_current ()->load_sema);
-
 	/* If load failed, quit. */
 	if (!success) {
 		palloc_free_page (file_name);
@@ -241,6 +243,8 @@ process_exec (void *f_name) {
 	_if.R.rsi = _if.rsp + 8;
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK-_if.rsp, true);
 	/* project 2: argument passing */
+
+	palloc_free_page (file_name);
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -264,8 +268,9 @@ process_wait (tid_t child_tid) {
 	 * XXX:       implementing the process_wait. */
 
 	struct thread *child;
-	if (!(child = get_child_thread(child_tid)))
+	if (!(child = get_child_thread(child_tid))) {
 		return -1;
+	}
 
 	sema_down (&child->wait_sema);
 	list_remove (&child->child_elem);
@@ -282,8 +287,7 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
-	for (int i = 2; i < MAX_FILE; i++) {
+	for (int i = 2; i < FDCOUNT_LIMIT; i++) {
 		close(i);
 	}
 	palloc_free_multiple(curr->fd_table, FDT_PAGES);
@@ -416,15 +420,14 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Open executable file. */
 	lock_acquire(&file_lock);
 	file = filesys_open (file_name);
+	lock_release(&file_lock);
 	if (file == NULL) {
-		lock_release(&file_lock);
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
 
 	t->running = file;
 	file_deny_write(file);
-	lock_release(&file_lock);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -495,7 +498,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (!setup_stack (if_))
 		goto done;
 
-/* Start address. */
+	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
@@ -543,6 +546,7 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 
 	/* Disallow mapping page 0.
 	   Not only is it a bad idea to map page 0, but if we allowed
+	   it then user code that passed a null pointer to system calls
 	   could quite likely panic the kernel by way of null pointer
 	   assertions in memcpy(), etc. */
 	if (phdr->p_vaddr < PGSIZE)

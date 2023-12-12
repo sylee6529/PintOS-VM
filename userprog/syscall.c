@@ -55,11 +55,13 @@ int add_file_to_fd_table (struct file *file) {
 	struct thread *t = thread_current();
 	struct file **fdt = t->fd_table;
 	int fd = t->fd_idx;
-
 	while (t->fd_table[fd] != NULL) {
+		if (fd >= FDCOUNT_LIMIT) {
+			t->fd_idx = FDCOUNT_LIMIT;
+			return -1;
+		}
 		fd++;
 	}
-
 	t->fd_idx = fd;
 	fdt[fd] = file;
 	return fd;
@@ -93,50 +95,36 @@ int wait (tid_t tid) {
 
 bool create (const char *file, unsigned initial_size) {
 	check_address(file);
-	if (filesys_create(file, initial_size)) {
-		return true;
-	}
-	else {
-		return false;
-	}
+	return filesys_create(file, initial_size);
 }
 
 bool remove (const char *file) {
 	check_address(file);
-	if (filesys_remove(file)) {
-		return true;
-	}
-	else {
-		return false;
-	}
+	return filesys_remove(file);
 }
 
 int open (const char *file) {
 	check_address(file);
 	lock_acquire(&file_lock);
 	struct file *file_info = filesys_open(file);
+	lock_release(&file_lock);
 	if (file_info == NULL) {
-		lock_release(&file_lock);
 		return -1;
 	}
 	int fd = add_file_to_fd_table(file_info);
 	if (fd == -1) {
-		lock_release(&file_lock);
 		file_close(file_info);
 	}
-	lock_release(&file_lock);
 	return fd;
 }
 
 int filesize (int fd) {
-	return file_length(thread_current()->fd_table[fd]);
+	return file_length(get_file_from_fd_table(fd));
 }
 
 int read (int fd, void *buffer, unsigned length) {
 	check_address(buffer);
-	
 	int bytesRead = 0;
-	lock_acquire(&file_lock);
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
 			char c = input_getc();
@@ -146,17 +134,16 @@ int read (int fd, void *buffer, unsigned length) {
 			if (c == '\n') break;
 		}
 	} else if (fd == 1) {
-		lock_release(&file_lock);
 		return -1;
 	} else {
 		struct file *f = get_file_from_fd_table(fd);
 		if (f == NULL) {
-			lock_release(&file_lock);
 			return -1; 
 		}
+		lock_acquire(&file_lock);
 		bytesRead = file_read(f, buffer, length);
+		lock_release(&file_lock);
 	}
-	lock_release(&file_lock);
 	return bytesRead;
 }
 
@@ -172,23 +159,20 @@ int write (int fd, const void *buffer, unsigned length) {
 	check_address(buffer);
 	int bytesRead = 0;
 
-	lock_acquire(&file_lock);
 	if (fd == 0) {
-		lock_release(&file_lock);
 		return -1;
 	} else if (fd == 1) {
 		putbuf(buffer, length);
-		lock_release(&file_lock);
 		return length;
 	} else {
 		struct file *f = get_file_from_fd_table(fd);
 		if (f == NULL) {
-			lock_release(&file_lock);
 			return -1;
 		}
+		lock_acquire(&file_lock);
 		bytesRead = file_write(f, buffer, length);
+		lock_release(&file_lock);
 	}
-	lock_release(&file_lock);
 	return bytesRead;
 }
 
@@ -228,21 +212,21 @@ void
 syscall_handler (struct intr_frame *f) {
 	switch (f->R.rax) {
 		case SYS_HALT:
-			halt();			// pintos를 종료시키는 시스템 콜
+			halt();
 			break;
 		case SYS_EXIT:
-			exit(f->R.rdi);	// 현재 프로세스를 종료시키는 시스템 콜
+			exit(f->R.rdi);
 			break;
 		case SYS_FORK:
 			f->R.rax = fork(f->R.rdi, f);
 			break;
 		case SYS_EXEC:
-			if (exec(f->R.rdi) == -1) {
+			if (exec(f->R.rdi) < 0) {
 				exit(-1);
 			}
 			break;
 		case SYS_WAIT:
-			f->R.rax = process_wait(f->R.rdi);
+			f->R.rax = wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
 			f->R.rax = create(f->R.rdi, f->R.rsi);
