@@ -1,0 +1,20 @@
+{
+    "files.associations": {
+        "*.inc": "c",
+        "thread.h": "c",
+        "inttypes.h": "c",
+        "fixed_point.h": "c",
+        "stdint.h": "c",
+        "syscall.h": "c",
+        "gdt.h": "c",
+        "init.h": "c",
+        "debug.h": "c",
+        "syscall-nr.h": "c",
+        "filesys.h": "c",
+        "loader.h": "c",
+        "interrupt.h": "c",
+        "intrinsic.h": "c",
+        "flags.h": "c",
+        "palloc.h": "c"
+    }
+}
