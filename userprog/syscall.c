@@ -46,9 +46,25 @@ syscall_init (void) {
 
 void check_address(void *addr) {
 	struct thread *t = thread_current();
+	/* [기존 코드: 정상적인 lazy loading 에서도 에러 검출되는 구조]
+
 	if (!is_user_vaddr(addr) || addr == NULL || pml4_get_page(t->pml4 , addr) == NULL) {
 		exit(-1);
 	}
+	*/
+
+	/* [수정 코드: lazy loading이라 pml4에 없는 상황 고려] */
+	if (!is_user_vaddr(addr) || addr == NULL) {
+		exit(-1);
+	}
+
+	if (pml4_get_page(t->pml4 , addr) == NULL){
+		// spt에 있으면 정상적인 lazy loading 상황 -> 에러 아님!
+		if(!spt_find_page(&t->spt, addr)){
+			exit(-1);
+		}
+	}
+	
 }
 
 int add_file_to_fd_table (struct file *file) {

@@ -121,9 +121,18 @@ void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
 
+void hash_page_destroy(struct hash_elem *e, void *aux);
+
 struct list swap_table;
 struct list frame_table;
 struct lock swap_table_lock;
 struct lock frame_table_lock; 
+
+struct tmp_aux {
+    struct file *file;
+    off_t ofs;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+};
 
 #endif /* VM_VM_H */

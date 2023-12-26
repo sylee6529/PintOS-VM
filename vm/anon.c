@@ -49,8 +49,10 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
     page->operations = &anon_ops;
 
     struct anon_page *anon_page = &page->anon;
-    anon_page->slot_number = -1;  // 초기화 함수가 호출되는 시점은 page가 매핑된
-                                  // 상태이므로 swap_slot을 차지하지 않는다.
+    // initializer가 호출되는 시점은 page가 매핑된 상태. 따라서 디스크의 swap 영역에 존재하지 않는다.
+    // 즉, swap_slot을 차지하지 않는다.
+    anon_page->slot_number = -1;  
+                                  
     return true;
 }
 
@@ -67,4 +69,18 @@ static bool anon_swap_out(struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void anon_destroy(struct page *page) {
     struct anon_page *anon_page = &page->anon;
+    
+	// anonymous page에 의해 유지되던 리소스를 해제합니다.
+	// page struct를 명시적으로 해제할 필요는 없으며, 호출자가 이를 수행해야 합니다.
+	struct list_elem *e;
+	struct swap_slot *swap_slot;
+
+	// 차지하던 slot 반환
+	for (e = list_begin(&swap_table); e != list_end(&swap_table); e = list_next(e)){
+		swap_slot = list_entry(e, struct swap_slot, swap_elem);
+		if (swap_slot->slot_no == anon_page->slot_number){
+			swap_slot->page = NULL;
+			break;
+		}
+	}
 }

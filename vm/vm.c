@@ -6,6 +6,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "userprog/process.h"
+#include "hash.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -49,8 +50,7 @@ static struct frame *vm_evict_frame(void);
 */
 
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
-                                    vm_initializer *init, void *aux)
-{
+                                    vm_initializer *init, void *aux){
 
   ASSERT(VM_TYPE(type) != VM_UNINIT)
 
@@ -161,9 +161,8 @@ static struct frame *vm_get_frame(void) {
 		victim->page = NULL;
 		return victim;
 	}
-
-	frame = (struct frame *)malloc(sizeof(struct frame)); // 프레임 할당
-    frame->kva = kva;									  // 프레임 멤버 초기화
+	
+    frame->kva = kva;
 	frame->page = NULL;
 
 	list_push_back(&frame_table, &frame->frame_elem);	
@@ -192,24 +191,25 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     struct page *page = NULL;
     //////////////////
     // 주소가 없거나 커널 영역 주소라면 false
-    if (addr == NULL) exit(-11);
-    if (is_kernel_vaddr(addr)) exit(-22);
+    if (addr == NULL) return false;
+    if (is_kernel_vaddr(addr)) return false;
 
     // 접근한 메모리가 load되지 않은 경우(physical page가 존재하지 않은 경우)
     if (not_present) {
-        /* TODO: Validate the fault */
-		page = spt_find_page(spt, addr);
+        /* 바로 do_claim하지 말고, fault 적절한지 체크 */		
+        // 일단 spt에는 있어야 함
+        page = spt_find_page(spt, addr);
 		if (page == NULL){
-			exit(-33);
+			return false;
         }
 		
-        // write 불가능한 페이지에 write 요청한 경우
+        // write 불가능한 페이지에 write 요청한 경우는 걸러주기
         if (write == 1 && page->writable == 0) {
-			exit(-44);
+			return false;
         }
 		return vm_do_claim_page(page);
 	}
-	exit(-55);
+	return false;
 }
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
@@ -219,17 +219,17 @@ void vm_dealloc_page(struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
-/* VA에 할당된 페이지 요청 */
+/* VA에 할당된 페이지 찾기 -> vm_do_claim_page(page) 호출 */
 bool vm_claim_page(void *va UNUSED) {
     struct page *page = NULL;
     /* TODO: Fill this function */
-    page = spt_find_page(&thread_current()->spt, va);
+    page = spt_find_page(&thread_current()->spt, va); 
 
     return vm_do_claim_page(page);
 }
 
 /* Claim the PAGE and set up the mmu. */
-/* 해당 페이지를 물리 메모리 할당 + frame에 매핑  */
+/* 해당 페이지를 물리 메모리 할당 + pml4와 frame 매핑  */
 static bool vm_do_claim_page(struct page *page) {
     struct frame *frame = vm_get_frame();
 
@@ -267,18 +267,59 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED) {
-    // &src 접근 -> spt_pages 순회하면서 값을 &dst에 넣어주기 (spt insert 활용)
+                                  struct supplemental_page_table *src UNUSED) {    
+        
+	struct hash_iterator i;	
+    struct hash *parent_pages = &src->spt_pages;
+
+    hash_first(&i, parent_pages);
+
+    // 부모 spt 해시테이블의 모든 elem 순회
+    while (hash_next(&i)){    
+        // 부모 프로세스의 현재 페이지 정보 저장            
+		struct page *parent_page = hash_entry(hash_cur(&i), struct page, elem);        
+        enum vm_type parent_type = parent_page->operations->type;        
+
+        // page type이 uninit인 경우
+        if (parent_type == VM_UNINIT){
+            vm_initializer *init = parent_page->uninit.init;
+            void *aux = parent_page->uninit.aux;
+
+            vm_alloc_page_with_initializer(VM_ANON, parent_page->va, parent_page->writable, init, aux);
+        } 
+        // page type이 anon 또는 file인 경우 -> 일단 uninit 페이지 생성함. type별 init으로 수정 필요       
+        else {
+    		// uninit page 생성 & 초기화
+    		if (!vm_alloc_page(parent_type, parent_page->va, parent_page->writable)){
+    			return false;
+            }
+
+    		// 해당 페이지에 빈 frame 할당 -> pml4에 연결 정보 저장 
+    		if (!vm_claim_page(parent_page->va)){
+    			return false;
+            }
+
+    		// 생성한 빈 frame에 부모 frame 내용 복제하기
+    		struct page *child_page = spt_find_page(dst, parent_page->va);
+    		memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);		
+        }
+    }
+	
+    return true;
 }
 
-/* Free the resource hold by the supplemental page table */
+/* Free the resource hold by the supplemental page table 
+    process_exit()에서 호출된다. thx for e-juhee
+*/
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
-     * writeback all the modified contents to the storage. */
-    /* TODO: 스레드가 보유하고 있는 모든 Supplemental_page_table을 삭제하고
-     * 수정된 모든 콘텐츠를 스토리지에 다시 씁니다. */
+     * writeback all the modified contents to the storage. */    
 
-    // hash_destroy 활용 -> 순회돌면서 연결 해제 및 모든 bucket free
-    // hash_action_func: 각 hash_elem에 대해서 해당 함수가 지정한 action 수행.
-    // hash_destroy(&spt->spt_pages, free_pages);
+    hash_clear(&spt->spt_pages, hash_page_destroy); // 해시 테이블의 모든 요소를 제거
+}
+
+void hash_page_destroy(struct hash_elem *e, void *aux){
+	struct page *page = hash_entry(e, struct page, elem);
+	destroy(page);
+	free(page);
 }

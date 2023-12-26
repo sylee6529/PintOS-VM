@@ -204,8 +204,7 @@ int process_exec(void *f_name) {
     _if.eflags = FLAG_IF | FLAG_MBS;
 
     /* We first kill the current context */
-    process_cleanup();
-    supplemental_page_table_init(&thread_current()->spt);
+    process_cleanup();    
 
     /* project 2: argument passing */
     char *argv[MAX_ARGS];
@@ -625,12 +624,6 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-struct lazy_load_arg {
-    struct file *file;
-    off_t ofs;
-    uint32_t read_bytes;
-    uint32_t zero_bytes;
-};
 
 // 첫번째 접근으로 인한 page fault일 때, 진짜 파일을 불러온다
 static bool lazy_load_segment(struct page *page, void *aux) {
@@ -638,21 +631,23 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */
 
-    struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)aux;
+    struct tmp_aux *tmp_aux = (struct tmp_aux *)aux;
 
     // 1) 파일의 position을 ofs으로 지정한다.
-    file_seek(lazy_load_arg->file, lazy_load_arg->ofs);
+    file_seek(tmp_aux->file, tmp_aux->ofs);
 
     // 2) 파일을 read_bytes만큼 물리 프레임에 읽어 들인다.
-    if (file_read(lazy_load_arg->file, page->frame->kva, lazy_load_arg->read_bytes) != (int)(lazy_load_arg->read_bytes)) {
+    if (file_read(tmp_aux->file, page->frame->kva, tmp_aux->read_bytes) != (int)(tmp_aux->read_bytes)) {
         palloc_free_page(page->frame->kva);
         return false;
     }
 
     // 3) 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
-    memset(page->frame->kva + lazy_load_arg->read_bytes, 0, lazy_load_arg->zero_bytes);    
+    memset(page->frame->kva + tmp_aux->read_bytes, 0, tmp_aux->zero_bytes);    
     	
-	free(lazy_load_arg);	
+	// 여기서 free하면 fork 때 자식이 참조할 aux가 사라져버림.
+    // 안하자니 memory leak이 예상됨 -> 우짤까 고민
+    // free(tmp_aux);	
 
     return true;
 }
@@ -703,23 +698,23 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
         // void *aux = NULL;
 
-        struct lazy_load_arg *lazy_load_arg = (struct lazy_load_arg *)malloc(sizeof(struct lazy_load_arg));
+        struct tmp_aux *tmp_aux = (struct tmp_aux *)malloc(sizeof(struct tmp_aux));
         
         // 내용이 담긴 파일 객체
-        lazy_load_arg->file = file;
+        tmp_aux->file = file;
 
         // 이 페이지에서 읽기 시작할 위치
-        lazy_load_arg->ofs = ofs;
+        tmp_aux->ofs = ofs;
 
         // 이 페이지에서 읽어야 하는 바이트 수
-        lazy_load_arg->read_bytes = page_read_bytes;
+        tmp_aux->read_bytes = page_read_bytes;
 
         // 이 페이지에서 read_bytes만큼 읽고 공간이 남아 0으로 채워야 하는 바이트 수
-        lazy_load_arg->zero_bytes = page_zero_bytes;
+        tmp_aux->zero_bytes = page_zero_bytes;
 
         ////////////////
         // vm_alloc_page_with_initializer를 호출하여 대기 중인 객체를 생성합니다.
-        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, lazy_load_arg)){
+        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, tmp_aux)){
             return false;
         }
 
