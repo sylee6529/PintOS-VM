@@ -175,10 +175,12 @@ static struct frame *vm_get_frame(void) {
 static void
 vm_stack_growth(void *addr UNUSED)
 {
-	// 스택 크기를 증가시키기 위해 anon page를 하나 이상 할당하여 주어진 주소(addr)가 더 이상 예외 주소(faulted address)가 되지 않도록 합니다.
-	// 할당할 때 addr을 PGSIZE로 내림하여 처리
+	// 스택 크기를 증가시키기 위해 anon page를 하나 이상 할당하여 
+    // 주어진 주소(addr)가 더 이상 예외 주소(faulted address)가 되지 않도록 합니다.
+	// (할당할 때 addr을 PGSIZE로 내림하여 처리!)
 	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
+
 
 /* Handle the fault on write_protected page */
 static bool vm_handle_wp(struct page *page UNUSED) {}
@@ -196,18 +198,32 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 
     // 접근한 메모리가 load되지 않은 경우(physical page가 존재하지 않은 경우)
     if (not_present) {
-        /* 바로 do_claim하지 말고, fault 적절한지 체크 */		
-        // 일단 spt에는 있어야 함
+        // 유저 모드인 경우, 커널 모드인 경우 각각 rsp 가져오기
+        void *rsp;        
+        if(user){
+            rsp = f->rsp;
+        } else {
+            rsp = thread_current()->rsp;
+        }
+
+        // stack growth 여부 체크: 
+        if ((USER_STACK - (1<<20) && rsp - 8 == addr && addr <= USER_STACK) || // push에 의한 Page fault
+            (USER_STACK - (1<<20) && rsp <= addr && addr <= USER_STACK)){
+            vm_stack_growth(addr);         
+        }
+    
+        // 해당 페이지가 spt에 존재하는지 체크
         page = spt_find_page(spt, addr);
-		if (page == NULL){
-			return false;
+        if (page == NULL){
+            return false;
         }
-		
-        // write 불가능한 페이지에 write 요청한 경우는 걸러주기
+        
+        // not writable 페이지에 write 요청한 건 아닌지 체크
         if (write == 1 && page->writable == 0) {
-			return false;
+            return false;
         }
-		return vm_do_claim_page(page);
+        return vm_do_claim_page(page);
+        
 	}
 	return false;
 }
