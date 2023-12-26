@@ -43,12 +43,12 @@ void syscall_init(void) {
     lock_init(&file_lock);
 }
 
-void check_address(void *addr) {
+struct page *check_address(void *addr) {
     struct thread *t = thread_current();
     if (!is_user_vaddr(addr) || addr == NULL) {
         exit(-1);
     }
-    return;
+    return spt_find_page(&thread_current()->spt, addr);
 }
 
 void check_buffer(void *buffer, size_t size, bool to_write) {
@@ -61,9 +61,7 @@ void check_buffer(void *buffer, size_t size, bool to_write) {
 
     ASSERT(start_addr <= end_addr);
     for (void *addr = end_addr; addr >= start_addr; addr -= PGSIZE) {
-        // printf("addr: %p\n", addr);
-        check_address(addr);
-        struct page *pg = spt_find_page(&thread_current()->spt, addr);
+        struct page *pg = check_address(addr);
         if (pg == NULL) {
             exit(-1);
         }
@@ -142,8 +140,6 @@ int filesize(int fd) { return file_length(get_file_from_fd_table(fd)); }
 int read(int fd, void *buffer, unsigned length) {
     check_buffer(buffer, length, true);
 
-    // check_buffer(buffer, length, true);
-
     int bytesRead = 0;
     if (fd == 0) {
         for (int i = 0; i < length; i++) {
@@ -176,8 +172,7 @@ struct file *get_file_from_fd_table(int fd) {
 }
 
 int write(int fd, const void *buffer, unsigned length) {
-    // check_address(buffer);
-    check_buffer(buffer, length, false);
+    check_address(buffer);
 
     int bytesRead = 0;
 
