@@ -48,12 +48,13 @@ void check_address(void *addr) {
     if (!is_user_vaddr(addr) || addr == NULL) {
         exit(-1);
     }
-
+#ifdef VM
     if (pml4_get_page(t->pml4, addr) == NULL) {
         if (!spt_find_page(&t->spt, addr)) {
             exit(-1);
         }
     }
+#endif
 }
 
 int add_file_to_fd_table(struct file *file) {
@@ -206,6 +207,10 @@ void close(int fd) {
 
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f) {
+#ifdef VM
+    thread_current()->rsp = f->rsp;
+#endif
+
     switch (f->R.rax) {
         case SYS_HALT:
             halt();
