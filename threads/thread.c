@@ -104,7 +104,6 @@ static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 void
 thread_init (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
-
 	/* Reload the temporal gdt for the kernel
 	 * This gdt does not include the user context.
 	 * The kernel will rebuild the gdt with user context, in gdt_init (). */

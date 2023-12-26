@@ -5,13 +5,27 @@
 
 struct page;
 enum vm_type;
-
-struct file_page {
+/* project 3 */
+/* a structure that includes the information for the loading */
+struct lazy_load_arg {
+    struct file *file;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+    off_t ofs;
+    void *open_addr;
+    void *close_addr;
 };
 
-void vm_file_init (void);
-bool file_backed_initializer (struct page *page, enum vm_type type, void *kva);
-void *do_mmap(void *addr, size_t length, int writable,
-		struct file *file, off_t offset);
-void do_munmap (void *va);
+struct file_page {
+    vm_initializer *init;
+    enum vm_type type;
+    void *aux;
+    bool (*page_initalizer)(struct page *, enum vm_type, void *kva);
+};
+
+void vm_file_init(void);
+bool file_backed_initializer(struct page *page, enum vm_type type, void *kva);
+void *do_mmap(void *addr, size_t length, int writable, struct file *file,
+              off_t offset);
+void do_munmap(void *va);
 #endif
