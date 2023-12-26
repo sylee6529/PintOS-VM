@@ -48,8 +48,6 @@ static bool uninit_initialize(struct page *page, void *kva) {
     vm_initializer *init = uninit->init;
     void *aux = uninit->aux;
 
-    // printf("uninit_initialize addr %p \n", kva);
-    // printf("uninit_initialize uninit->type %p \n", uninit->type);
     /* TODO: You may need to fix this function. */
     return uninit->page_initializer(page, uninit->type, kva) &&
            (init ? init(page, aux) : true);

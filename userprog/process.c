@@ -624,7 +624,6 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  * This function is responsible for loading, practically. */
 static bool lazy_load_segment(struct page *page, void *aux) {
     void *kva_ = page->frame->kva;
-    // printf("kva_ :%q \n", kva_);
 
     struct lazy_load_arg *lla = (struct lazy_load_arg *)aux;
     // set ofs as file's position

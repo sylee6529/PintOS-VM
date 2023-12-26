@@ -220,7 +220,6 @@ void close(int fd) {
 
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f) {
-    // printf("syscall_handler : %d  \n", f->R.rax);
     switch (f->R.rax) {
         case SYS_HALT:
             halt();

@@ -160,13 +160,10 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
                          bool user UNUSED, bool write UNUSED,
                          bool not_present UNUSED) {
-    // printf("page fault addr : %p \n", addr);
-
     struct supplemental_page_table *spt = &thread_current()->spt;
     struct page *page = NULL;
 
     if (addr == NULL || is_kernel_vaddr(addr)) {
-        // printf('1111');
         return false;
     }
 
@@ -174,19 +171,15 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     if (not_present) {
         page = spt_find_page(spt, addr);
         if (page == NULL) {
-            // printf('2222');
             return false;
         }
         if (write == 1 &&
             page->writable ==
                 0) {  // if it's asking to write in unwritable page
-
-            // printf('33333');
             return false;
         }
         return vm_do_claim_page(page);
     }
-    // printf('44444');
     return false;
 }
 
@@ -201,7 +194,6 @@ void vm_dealloc_page(struct page *page) {
 bool vm_claim_page(void *va UNUSED) {
     struct page *page = NULL;
     // spt에서 va에 해당하는 page 찾기
-    // printf("vm_claim_page va : %p \n", va);
     page = spt_find_page(&thread_current()->spt, va);
     if (page == NULL) {
         return false;
@@ -212,7 +204,6 @@ bool vm_claim_page(void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool vm_do_claim_page(struct page *page) {
     struct frame *frame = vm_get_frame();
-    // printf("vm_do_claim_page va : %p \n", page->va);
 
     /* Set links */
     frame->page = page;
@@ -222,8 +213,6 @@ static bool vm_do_claim_page(struct page *page) {
     // the page table (pml4_set_page())
     struct thread *curr = thread_current();
     pml4_set_page(curr->pml4, page->va, frame->kva, page->writable);
-    // printf("pml4_get_page va : %p \n", pml4_get_page(curr->pml4, page->va));
-    // printf("vm_do_claim_page frame : %p \n", page->frame->kva);
 
     return swap_in(page, frame->kva);
 }
