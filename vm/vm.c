@@ -289,7 +289,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
         } 
         // page type이 anon 또는 file인 경우 -> 일단 uninit 페이지 생성함. type별 init으로 수정 필요       
         else {
-    		// uninit page 생성 & 초기화
+    		// parent type에 해당하는 page 생성
     		if (!vm_alloc_page(parent_type, parent_page->va, parent_page->writable)){
     			return false;
             }

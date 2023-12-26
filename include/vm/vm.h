@@ -70,6 +70,8 @@ struct frame {
     struct page *page;
     struct list_elem frame_elem;
 };
+
+/* disk의 swap 영역에 들어가는 slot들 */
 struct swap_slot {
     struct page *page;
     uint32_t slot_no;

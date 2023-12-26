@@ -64,7 +64,6 @@ void check_address(void *addr) {
 			exit(-1);
 		}
 	}
-	
 }
 
 int add_file_to_fd_table (struct file *file) {
