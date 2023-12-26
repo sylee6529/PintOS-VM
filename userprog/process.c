@@ -648,11 +648,12 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     if (file_read(file, page->frame->kva, page_read_bytes) !=
         (int)page_read_bytes) {
         palloc_free_page(page->frame->kva);
+        // free(aux);
         return false;
     }
     memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
 
-    free(aux);
+    // free(aux);
 
     return true;
 }

@@ -135,45 +135,19 @@ static void page_fault(struct intr_frame *f) {
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
 
-    // int PHYS_BASE = 0x80040000;
-    // int VIRTUAL_BASE = 0x00000000;
-    // // printf("page fault at %p\n", fault_addr);
-    // /* Handle kernel-mode page faults. */
-    // if (!user) {
-    //     // printf("not user\n");
-    //     if (is_kernel_vaddr(fault_addr)) {
-    //         // printf("is kernel vaddr\n");
-    //         if (fault_addr >= PHYS_BASE) {
-    //             // printf("fault addr >= phys base\n");
-    //             exit(-1);
-    //         } else {
-    //             // printf("fault addr < phys base\n");
-    //         }
-
-    //     }
-
-    //     else {
-    //         // printf("not kernel vaddr\n");
-    //         exit(-1);
-    //     }
-    // }
+    int PHYS_BASE = 0x80040000;
+    int VIRTUAL_BASE = 0x00000000;
 
     // /* Handle user-mode page faults. */
-    // else {
-    //     // printf("user\n");
-    //     if (is_kernel_vaddr(fault_addr)) {
-    //         // printf("is kernel vaddr\n");
-    //         exit(-1);
-    //     } else {
-    //         // printf("not kernel vaddr\n");
-    //         if (fault_addr <= VIRTUAL_BASE) {
-    //             // printf("fault addr <= virtual base\n");
-    //             exit(-1);
-    //         } else {
-    //             // printf("fault addr > virtual base\n");
-    //         }
-    //     }
-    // }
+    if (user) {
+        if (is_kernel_vaddr(fault_addr)) {
+            exit(-1);
+        } else {
+            if (fault_addr <= VIRTUAL_BASE) {
+                exit(-1);
+            }
+        }
+    }
 
 #ifdef VM
     /* For project 3 and later. */

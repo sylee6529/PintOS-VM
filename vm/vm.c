@@ -1,5 +1,6 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
+#include "userprog/process.h"
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
@@ -79,7 +80,12 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
         page->writable = writable;
 
         /* TODO: Insert the page into the spt. */
-        return spt_insert_page(spt, page);
+        if (spt_insert_page(spt, page)) {
+            return true;
+        }
+
+        free(page);
+        return false;
     }
 err:
     return false;
@@ -137,10 +143,15 @@ static struct frame *vm_evict_frame(void) {
 static struct frame *vm_get_frame(void) {
     struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
     /* TODO: Fill this function. */
-    frame->kva = palloc_get_page(PAL_USER);
-    if (frame->kva == NULL) {
-        frame = vm_evict_frame();
+    void *kva = palloc_get_page(PAL_USER);
+
+    if (kva == NULL) {
+        struct frame *victim = vm_evict_frame();
+        victim->page = NULL;
+        return victim;
     }
+
+    frame->kva = kva;
     frame->page = NULL;
 
     ASSERT(frame != NULL);
@@ -151,30 +162,39 @@ static struct frame *vm_get_frame(void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr UNUSED) {
+    vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+}
 
 /* Handle the fault on write_protected page */
-static bool vm_handle_wp(struct page *page UNUSED) {}
+static bool vm_handle_wp(struct page *page UNUSED) {
+    // handle not writeable page
+    return false;
+}
 
 /* Return true on success */
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr,
-                         bool user UNUSED, bool write UNUSED,
-                         bool not_present UNUSED) {
+bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user,
+                         bool write, bool not_present) {
     struct supplemental_page_table *spt = &thread_current()->spt;
     struct page *page = NULL;
     /* TODO: Validate the fault */
 
-    if (!user || is_kernel_vaddr(addr)) {
-        return false;
-    }
+    if (addr == NULL) return false;
+    if (is_kernel_vaddr(addr)) return false;
     /* TODO: Your code goes here */
-    if (not_present)  // 접근한 메모리의 physical page가 존재하지 않은 경우
-    {
+
+    // 접근한 메모리의 physical page가 존재하지 않은 경우
+    if (not_present) {
         page = spt_find_page(spt, addr);
-        if (page == NULL) return false;
-        if (write == 1 &&
-            page->writable == 0)  // write 불가능한 페이지에 write 요청한 경우
+        if (page == NULL) {
             return false;
+        }
+
+        // write 불가능한 페이지에 write 요청한 경우
+        if (write == 1 && page->writable == 0) {
+            return vm_handle_wp(page);
+        }
+
         return vm_do_claim_page(page);
     }
 
@@ -193,9 +213,6 @@ bool vm_claim_page(void *va UNUSED) {
     struct page *page = NULL;
     /* TODO: Fill this function */
     page = spt_find_page(&thread_current()->spt, va);
-    if (page == NULL) {
-        return false;
-    }
 
     return vm_do_claim_page(page);
 }
@@ -209,16 +226,11 @@ static bool vm_do_claim_page(struct page *page) {
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-    bool set_page = false;
-    if (!pml4_get_page(thread_current()->pml4,
-                       page->va)) {  // NULL이어야 기존것이 아님.
-        set_page = pml4_set_page(thread_current()->pml4, page->va, frame->kva,
-                                 page->writable);
-        if (set_page) {
-            return swap_in(page, frame->kva);
-        }
-    }
-    return false;
+    // 가상 주소와 물리 주소를 매핑
+    struct thread *current = thread_current();
+    pml4_set_page(current->pml4, page->va, frame->kva, page->writable);
+
+    return swap_in(page, frame->kva);
 }
 
 /* Return hash value of page p. */
@@ -243,16 +255,58 @@ void supplemental_page_table_init(struct supplemental_page_table *spt) {
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED) {}
+                                  struct supplemental_page_table *src UNUSED) {
+    struct hash_iterator i;
+    struct hash *parent_pages = &src->page_map;
 
-void page_free(struct hash_elem *e, void *aux) {
-    struct page *page_destroyed = hash_entry(e, struct page, hash_elem);
-    // destroy(page_destroyed);
-    free(page_destroyed);
+    hash_first(&i, parent_pages);
+
+    // 부모 spt 해시테이블의 모든 elem 순회
+    while (hash_next(&i)) {
+        // 부모 프로세스의 현재 페이지 정보 저장
+        struct page *parent_page =
+            hash_entry(hash_cur(&i), struct page, hash_elem);
+        enum vm_type parent_type = parent_page->operations->type;
+
+        // page type이 uninit인 경우
+        if (parent_type == VM_UNINIT) {
+            vm_initializer *init = parent_page->uninit.init;
+            void *aux = parent_page->uninit.aux;
+
+            vm_alloc_page_with_initializer(VM_ANON, parent_page->va,
+                                           parent_page->writable, init, aux);
+        }
+        // page type이 anon 또는 file인 경우 -> 일단 uninit 페이지 생성함.
+        // type별 init으로 수정 필요
+        else {
+            // uninit page 생성 & 초기화
+            if (!vm_alloc_page(parent_type, parent_page->va,
+                               parent_page->writable)) {
+                return false;
+            }
+
+            // 해당 페이지에 빈 frame 할당 -> pml4에 연결 정보 저장
+            if (!vm_claim_page(parent_page->va)) {
+                return false;
+            }
+
+            // 생성한 빈 frame에 부모 frame 내용 복제하기
+            struct page *child_page = spt_find_page(dst, parent_page->va);
+            memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+        }
+    }
+
+    return true;
+}
+void spt_destructor(struct hash_elem *e, void *aux) {
+    const struct page *p = hash_entry(e, struct page, hash_elem);
+    free(p);
 }
 
 /* Free the resource hold by the supplemental page table */
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
+void supplemental_page_table_kill(struct supplemental_page_table *spt) {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
+
+    hash_clear(&spt->page_map, spt_destructor);
 }
