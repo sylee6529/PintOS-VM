@@ -48,13 +48,30 @@ void check_address(void *addr) {
     if (!is_user_vaddr(addr) || addr == NULL) {
         exit(-1);
     }
-#ifdef VM
-    if (pml4_get_page(t->pml4, addr) == NULL) {
-        if (!spt_find_page(&t->spt, addr)) {
+    return;
+}
+
+void check_buffer(void *buffer, size_t size, bool to_write) {
+    if (buffer == NULL) exit(-1);
+
+    if (buffer <= USER_STACK && buffer >= thread_current()->rsp) return;
+
+    void *start_addr = pg_round_down(buffer);
+    void *end_addr = pg_round_down(buffer + size);
+
+    ASSERT(start_addr <= end_addr);
+    for (void *addr = end_addr; addr >= start_addr; addr -= PGSIZE) {
+        // printf("addr: %p\n", addr);
+        check_address(addr);
+        struct page *pg = spt_find_page(&thread_current()->spt, addr);
+        if (pg == NULL) {
+            exit(-1);
+        }
+
+        if (to_write == true && pg->writable == false) {
             exit(-1);
         }
     }
-#endif
 }
 
 int add_file_to_fd_table(struct file *file) {
@@ -123,7 +140,10 @@ int open(const char *file) {
 int filesize(int fd) { return file_length(get_file_from_fd_table(fd)); }
 
 int read(int fd, void *buffer, unsigned length) {
-    check_address(buffer);
+    check_buffer(buffer, length, true);
+
+    // check_buffer(buffer, length, true);
+
     int bytesRead = 0;
     if (fd == 0) {
         for (int i = 0; i < length; i++) {
@@ -156,7 +176,9 @@ struct file *get_file_from_fd_table(int fd) {
 }
 
 int write(int fd, const void *buffer, unsigned length) {
-    check_address(buffer);
+    // check_address(buffer);
+    check_buffer(buffer, length, false);
+
     int bytesRead = 0;
 
     if (fd == 0) {

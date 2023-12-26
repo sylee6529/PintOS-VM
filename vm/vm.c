@@ -193,8 +193,9 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user,
         }
 
         else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr &&
-                 addr <= USER_STACK)
+                 addr <= USER_STACK) {
             vm_stack_growth(addr);
+        }
 
         page = spt_find_page(spt, addr);
         if (page == NULL) {
