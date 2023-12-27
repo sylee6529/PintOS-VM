@@ -138,21 +138,14 @@ int filesize (int fd) {
 	return file_length(get_file_from_fd_table(fd));
 }
 
-int read (int fd, void *buffer, unsigned length) {
-	/* 
-	[write-protected 여부 체크]
-	
-	1) pt-write-code2 테스트
+int read (int fd, void *buffer, unsigned length) {	
+	/* 	
+	[pt-write-code2 테스트]
 	- 잘못된 영역(코드 세그먼트)에 read() 시도를 한다. 
 	- 메모리 관점에서 보면 read() 시스템콜은 파일의 데이터를 읽어서 메모리의 버퍼에 쓰는 작업을 수행
 	- 즉, not writable한 페이지에 write를 시도하고 있다. 
-	- 해당 addr 페이지의 writable 여부를 체크해주고, -1 exit code를 반환해야 한다.
-
-	2) pt-grow-stk-sc 테스트
-	- 첫 스택접근이 syscall에 의한 것일 때도 스택이 올바르게 확장되는가를 체크한다. 
-
-	*/
-
+	=> 해당 addr 페이지의 writable 여부를 체크해주고, exit(-1)을 반환해야 한다.
+	*/ 
 	struct page *page = spt_find_page(&thread_current()->spt, buffer);
 	if (page) {
 		if (!page->writable) {
@@ -160,7 +153,16 @@ int read (int fd, void *buffer, unsigned length) {
 		}
 	}
 
-	//
+	/* 
+	[pt-grow-stk-sc 테스트]
+	- 첫 스택접근이 syscall에 의한 것일 때도 스택이 올바르게 확장되는가를 체크한다.
+	- check_address(buffer) 내부의 spt 검사에서 문제가 발생함. 
+	=> check_address()를 삭제해주고, 주소가 user 영역인지, null 값은 아닌지 정도만 유효성 검사를 해준다.
+	*/
+	if (!is_user_vaddr(buffer) || buffer == NULL) {
+		exit(-1);
+	}
+	
 
 	int bytesRead = 0;
 	if (fd == 0) { 
