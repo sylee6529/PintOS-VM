@@ -17,10 +17,10 @@ struct lazy_load_arg {
 };
 
 struct file_page {
-    vm_initializer *init;
-    enum vm_type type;
-    void *aux;
-    bool (*page_initalizer)(struct page *, enum vm_type, void *kva);
+    struct file *file;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+    off_t ofs;
 };
 
 void vm_file_init(void);

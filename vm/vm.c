@@ -285,6 +285,25 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
         // 매핑된 프레임에 내용 로딩
         struct page *dst_page = spt_find_page(dst, upage);
         memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+
+        // type이 file 이면
+        if (type == VM_FILE) {
+            struct lazy_load_arg *file_aux =
+                malloc(sizeof(struct lazy_load_arg));
+            file_aux->file = src_page->file.file;
+            file_aux->ofs = src_page->file.ofs;
+            file_aux->read_bytes = src_page->file.read_bytes;
+            file_aux->zero_bytes = src_page->file.zero_bytes;
+            if (!vm_alloc_page_with_initializer(type, upage, writable, NULL,
+                                                file_aux))
+                return false;
+            struct page *file_page = spt_find_page(dst, upage);
+            file_backed_initializer(file_page, type, NULL);
+            file_page->frame = src_page->frame;
+            pml4_set_page(thread_current()->pml4, file_page->va,
+                          src_page->frame->kva, src_page->writable);
+            continue;
+        }
     }
     return true;
 }

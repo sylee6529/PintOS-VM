@@ -622,7 +622,7 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  * upper block.
  *
  * This function is responsible for loading, practically. */
-static bool lazy_load_segment(struct page *page, void *aux) {
+bool lazy_load_segment(struct page *page, void *aux) {
     void *kva_ = page->frame->kva;
 
     struct lazy_load_arg *lla = (struct lazy_load_arg *)aux;

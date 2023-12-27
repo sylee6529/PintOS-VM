@@ -10,6 +10,7 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "userprog/syscall.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -246,7 +247,7 @@ void syscall_handler(struct intr_frame *f) {
 #ifdef VM
     thread_current()->rsp = f->rsp;  // project3: stack growth
 #endif
-    switch (f->R.rax) {
+    switch (syscall_n) {
         case SYS_HALT:
             halt();
             break;
@@ -291,7 +292,39 @@ void syscall_handler(struct intr_frame *f) {
         case SYS_CLOSE:
             close(f->R.rdi);
             break;
+        case SYS_MMAP:
+            // void *addr: rdi, size_t length: rsi, int writable: rdx, int fd:
+            // r10, off_t offset: r8
+            f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+            break;
+        case SYS_MUNMAP:
+            munmap(f->R.rdi);
+            break;
         default:
             exit(-1);
     }
 }
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
+    if (!addr || addr != pg_round_down(addr)) return NULL;  // addr 없는 경우
+
+    if (offset != pg_round_down(offset))
+        return NULL;  // offset이 page aligned 되지 않은 경우
+
+    if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length))
+        return NULL;  // addr이 user 영역이 아닌 경우
+
+    if (spt_find_page(&thread_current()->spt, addr))
+        return NULL;  // spt에 있는 경우
+
+    struct file *f = get_file_from_fd_table(fd);
+    if (f == NULL) return NULL;  // file이 없는 경우
+
+    if (file_length(f) == 0 || (int)length <= 0)
+        return NULL;  // file의 길이가 0 혹은 음수인 경우
+
+    return do_mmap(addr, length, writable, f,
+                   offset);  // 파일이 매핑된 가상 주소 반환
+}
+
+void munmap(void *addr) { do_munmap(addr); }
