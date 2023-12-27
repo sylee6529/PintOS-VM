@@ -133,7 +133,7 @@ struct thread {
 #ifdef VM
     /* Table for whole virtual memory owned by thread. */
     struct supplemental_page_table spt;
-    void *rsp;
+    void *rsp; // stack growth - 커널 모드 전환
 #endif
 
     /* Owned by thread.c. */

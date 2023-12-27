@@ -206,8 +206,13 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
             rsp = thread_current()->rsp;
         }
 
-        // stack growth 여부 체크: 
-        if ((USER_STACK - (1<<20) && rsp - 8 == addr && addr <= USER_STACK) || // push에 의한 Page fault
+        /* 
+         [Stack Growth 요청 여부 체크]
+         rsp <= addr <= USER_STACK 에 해당하는 주소값이라면 Stack Growth를 수행한다.
+         한편, x86의 PUSH 인스트럭션은 rsp 조정 전에 access permission을 체크한다.
+         따라서 이 경우에 실제 Page Fault 발생 위치는 rsp보다 8 낮은 주소이다. 
+        */
+        if ((USER_STACK - (1<<20) && rsp - 8 == addr && addr <= USER_STACK) || 
             (USER_STACK - (1<<20) && rsp <= addr && addr <= USER_STACK)){
             vm_stack_growth(addr);         
         }

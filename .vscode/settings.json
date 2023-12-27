@@ -3,6 +3,7 @@
         "vm.h": "c",
         "hash.h": "c",
         "process.h": "c",
-        "debug.h": "c"
+        "debug.h": "c",
+        "thread.h": "c"
     }
 }

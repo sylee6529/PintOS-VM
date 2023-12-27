@@ -57,7 +57,7 @@ void check_address(void *addr) {
 	if (!is_user_vaddr(addr) || addr == NULL) {
 		exit(-1);
 	}
-
+	
 	if (pml4_get_page(t->pml4 , addr) == NULL){
 		// spt에 있으면 정상적인 lazy loading 상황 -> 에러 아님!
 		if(!spt_find_page(&t->spt, addr)){
@@ -65,6 +65,7 @@ void check_address(void *addr) {
 		}
 	}
 }
+
 
 int add_file_to_fd_table (struct file *file) {
 	struct thread *t = thread_current();
@@ -138,7 +139,29 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned length) {
-	check_address(buffer);
+	/* 
+	[write-protected 여부 체크]
+	
+	1) pt-write-code2 테스트
+	- 잘못된 영역(코드 세그먼트)에 read() 시도를 한다. 
+	- 메모리 관점에서 보면 read() 시스템콜은 파일의 데이터를 읽어서 메모리의 버퍼에 쓰는 작업을 수행
+	- 즉, not writable한 페이지에 write를 시도하고 있다. 
+	- 해당 addr 페이지의 writable 여부를 체크해주고, -1 exit code를 반환해야 한다.
+
+	2) pt-grow-stk-sc 테스트
+	- 첫 스택접근이 syscall에 의한 것일 때도 스택이 올바르게 확장되는가를 체크한다. 
+
+	*/
+
+	struct page *page = spt_find_page(&thread_current()->spt, buffer);
+	if (page) {
+		if (!page->writable) {
+			exit(-1);
+		}
+	}
+
+	//
+
 	int bytesRead = 0;
 	if (fd == 0) { 
 		for (int i = 0; i < length; i++) {
@@ -170,7 +193,7 @@ struct file *get_file_from_fd_table (int fd) {
 	return t->fd_table[fd];
 }
 
-int write (int fd, const void *buffer, unsigned length) {
+int write (int fd, const void *buffer, unsigned length) {	
 	check_address(buffer);
 	int bytesRead = 0;
 
@@ -225,6 +248,10 @@ void close (int fd) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) {
+	// syscall 호출되면 커널 모드로 전환 -> thread에 rsp 저장
+	thread_current()->rsp = f->rsp;
+
+	// syscall table
 	switch (f->R.rax) {
 		case SYS_HALT:
 			halt();
