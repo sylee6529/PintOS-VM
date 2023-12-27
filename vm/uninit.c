@@ -62,10 +62,9 @@ static void uninit_destroy(struct page *page) {
      * TODO: If you don't have anything to do, just return. */
     if (page->operations == &uninit_ops) {
         struct uninit_page *uninit = &page->uninit;
-        /* 페이지의 보조 정보를 해제합니다. */
-        if (uninit->aux != NULL) {
-            file_close(uninit->aux);
-            uninit->aux = NULL;
+        /* 페이지의 보조 정보를 해제 */
+        if (page->uninit.aux != NULL) {
+            // free(page->uninit.aux);
         }
     }
 }

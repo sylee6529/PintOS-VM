@@ -312,7 +312,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 }
 void spt_destructor(struct hash_elem *e, void *aux) {
     const struct page *p = hash_entry(e, struct page, hash_elem);
-    free(p);
+    vm_dealloc_page(p);
 }
 
 /* Free the resource hold by the supplemental page table */

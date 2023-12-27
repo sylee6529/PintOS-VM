@@ -28,6 +28,7 @@ enum vm_type {
 #include "vm/anon.h"
 #include "vm/file.h"
 #include "hash.h"
+#include "threads/vaddr.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
@@ -50,6 +51,7 @@ struct page {
     bool writable;
     bool is_loaded;
     struct hash_elem hash_elem;
+    int mapped_page_count;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
@@ -67,6 +69,7 @@ struct page {
 struct frame {
     void *kva;
     struct page *page;
+    struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -91,6 +94,14 @@ struct page_operations {
 struct supplemental_page_table {
     struct hash page_map;
 };
+struct slot {
+    struct page *page;
+    uint32_t slot_no;
+    struct list_elem swap_elem;
+};
+
+struct list swap_table;
+struct list frame_table;
 
 #include "threads/thread.h"
 void supplemental_page_table_init(struct supplemental_page_table *spt);

@@ -616,20 +616,14 @@ static bool install_page(void *upage, void *kpage, bool writable) {
             pml4_set_page(t->pml4, upage, kpage, writable));
 }
 #else
+
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-struct load_info {
-    struct file *file;
-    off_t ofs;
-    uint32_t read_bytes;
-    uint32_t zero_bytes;
-};
-
 /* load_segment에서 설정한 정보 aux를 사용하여 segment에서 읽을 파일을 찾고
  * 메모리로 읽는다. */
-static bool lazy_load_segment(struct page *page, void *aux) {
+bool lazy_load_segment(struct page *page, void *aux) {
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */

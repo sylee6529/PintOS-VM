@@ -10,7 +10,7 @@
 #include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-
+#include "vm/vm.h"
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 struct file *get_file_from_fd_table(int fd);
@@ -206,6 +206,32 @@ void close(int fd) {
     fdt[fd] = NULL;
 }
 
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
+    // addr이 없거나 page-align되지 않은 경우
+    if (!addr || addr != pg_round_down(addr)) return NULL;
+
+    // offset이 page-align되지 않은 경우
+    if (offset != pg_round_down(offset)) return NULL;
+
+    // addr과 늘어날 영역이 유저 영역이 아닌 경우
+    if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length)) return NULL;
+
+    // addr의 페이지가 이미 할당되어 있는 경우
+    if (spt_find_page(&thread_current()->spt, addr)) return NULL;
+
+    // fd에 해당하는 file이 없는 경우
+    struct file *f = get_file_from_fd_table(fd);
+    if (f == NULL) return NULL;
+
+    // file의 길이가 0 이하인 경우
+    if (file_length(f) == 0 || (int)length <= 0) return NULL;
+
+    return do_mmap(addr, length, writable, f,
+                   offset);  // 파일이 매핑된 가상 주소 반환
+}
+
+void munmap(void *addr) { do_munmap(addr); }
+
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f) {
 #ifdef VM
@@ -256,6 +282,12 @@ void syscall_handler(struct intr_frame *f) {
             break;
         case SYS_CLOSE:
             close(f->R.rdi);
+            break;
+        case SYS_MMAP:
+            f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+            break;
+        case SYS_MUNMAP:
+            munmap(f->R.rdi);
             break;
         default:
             exit(-1);
