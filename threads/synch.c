@@ -196,8 +196,7 @@ void lock_acquire(struct lock *lock) {
     if (lock->holder != NULL) {
         // put signal that this thread is waiting for the lock
         cur->waiting_lock = lock;
-        list_insert_ordered(&lock->holder->donations, &cur->donations_elem,
-                            donations_priority_more, NULL);
+        list_push_back(&lock->holder->donations, &cur->donations_elem);
         // nested donation of priority
         if (!thread_mlfqs) {
             donate_priority();
