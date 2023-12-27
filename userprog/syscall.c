@@ -51,27 +51,6 @@ struct page *check_address(void *addr) {
     return spt_find_page(&thread_current()->spt, addr);
 }
 
-void check_buffer(void *buffer, size_t size, bool to_write) {
-    if (buffer == NULL) exit(-1);
-
-    if (buffer <= USER_STACK && buffer >= thread_current()->rsp) return;
-
-    void *start_addr = pg_round_down(buffer);
-    void *end_addr = pg_round_down(buffer + size);
-
-    ASSERT(start_addr <= end_addr);
-    for (void *addr = end_addr; addr >= start_addr; addr -= PGSIZE) {
-        struct page *pg = check_address(addr);
-        if (pg == NULL) {
-            exit(-1);
-        }
-
-        if (to_write == true && pg->writable == false) {
-            exit(-1);
-        }
-    }
-}
-
 int add_file_to_fd_table(struct file *file) {
     struct thread *t = thread_current();
     struct file **fdt = t->fd_table;
@@ -138,7 +117,12 @@ int open(const char *file) {
 int filesize(int fd) { return file_length(get_file_from_fd_table(fd)); }
 
 int read(int fd, void *buffer, unsigned length) {
-    check_buffer(buffer, length, true);
+    struct page *page = check_address(buffer);
+    if (page) {
+        if (!page->writable) {
+            exit(-1);
+        }
+    }
 
     int bytesRead = 0;
     if (fd == 0) {
