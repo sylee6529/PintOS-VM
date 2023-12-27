@@ -111,7 +111,7 @@ bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user,
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
                                     bool writable, vm_initializer *init,
                                     void *aux);
-                                    
+
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);

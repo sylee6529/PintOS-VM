@@ -43,7 +43,7 @@ void syscall_init(void) {
     lock_init(&file_lock);
 }
 
-void check_address(void *addr) {
+struct page *check_address(void *addr) {
     struct thread *t = thread_current();
 
     /*  project 3 이전 코드
@@ -62,7 +62,8 @@ void check_address(void *addr) {
     }
 #else
     if (pml4_get_page(t->pml4, addr) == NULL) {
-        // pml4에 없고, spt에 있으면 정상적인 lazy loading 상황 -> 에러 아님!
+        // pml4에 없고, spt에 있으면 정상적인 lazy loading 상황 -> 에러 아님.
+        // 없으면 예외처리
         if (!spt_find_page(&t->spt, addr)) {
             exit(-1);
         }
@@ -136,7 +137,28 @@ int open(const char *file) {
 int filesize(int fd) { return file_length(get_file_from_fd_table(fd)); }
 
 int read(int fd, void *buffer, unsigned length) {
-    check_address(buffer);
+    /*
+     * Added for the "pt-write-code2" test code.
+     * This test attempt to read in the wrong area(code segment)
+     * When it tries to write in the not writable page, exits
+     */
+    struct page *page = spt_find_page(&thread_current()->spt, buffer);
+    if (page) {
+        if (!page->writable) {
+            exit(-1);
+        }
+    }
+
+    /*
+     * Added for the "pt-grow-stk-sc" test code.
+     * the original code causes problem in "check_address(buffer)" when it
+     * checks the spt to fix the problem, delete the check_address(), check if
+     * it's in the user area, and check NULL
+     */
+    if (!is_user_vaddr(buffer) || buffer == NULL) {
+        exit(-1);
+    }
+
     int bytesRead = 0;
     if (fd == 0) {
         for (int i = 0; i < length; i++) {
