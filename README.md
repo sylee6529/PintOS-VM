@@ -40,5 +40,10 @@ Project3 Virtual Memory 부분을 구현합니다.
 ⚠️ 동시에 같은 파트를 코딩하기로 정했기 때문에, 이슈 기능을 이용해서 서로의 진도를 체크합니다 ⚠️
 
 - 본인 이름으로 한 Issue를 생성한 후, 할 일/구현 목표 등을 기록합니다.
-- 각 팀원의 진행 사항 및 커밋 타임라인을 볼 수 있습니다.
+- 각 팀원의 진행 사항 및 커밋 타임라인을 볼 수 있습니다. (예시는 아래)
+
+![image](https://github.com/sylee6529/PintOS-VM/assets/68765200/88fdc8b2-d621-4474-80ba-e5624766e964)
+
+- 각 브랜치에 commit/push 하면 팀 Slack 채널의 알림 봇으로 서로에게 공유됩니다.
+![image](https://github.com/sylee6529/PintOS-VM/assets/68765200/03376bdd-c7c2-4c38-b0a2-cc84717b25a4)
 
