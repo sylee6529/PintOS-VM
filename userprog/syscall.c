@@ -220,6 +220,10 @@ void close(int fd) {
 
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f) {
+    int syscall_n = f->R.rax;
+#ifdef VM
+    thread_current()->rsp = f->rsp;  // project3: stack growth
+#endif
     switch (f->R.rax) {
         case SYS_HALT:
             halt();
